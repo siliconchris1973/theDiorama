@@ -514,18 +514,22 @@ void turnOnLightEffects(char light){
   if (light == 's') {
     #ifdef SIMPLELED
       if (lightEffect == 'b') {
+        // in case the light effects switch is LOW, we want a smooth light effect
         analogWrite(SIMPLE_LED_PIN, 128 + 127 * cos(2 * PI / 20000 * millis()));
       } else {
+        // in case the light effects switch is HIGH, we want the light just to be on
         digitalWrite(SIMPLE_LED_PIN, HIGH);
       }
     #endif
   } else if (light == 'r') {
     #ifdef RGBLED
       if (lightEffect == 'b') {
-        // in case the light effects switch is LOW, we want a breathing like pulsating of light 
-        // this can either be a real pulsating or a cycle through all given colors
-
+        // in case the light effects switch is LOW, we want a smooth light effect
+        // this can either be a breathing like pulsating or a cycle through all given colors
+        // which one is determined at compile time with the directive RGBSINEWAVE or RGBCOLORCYCLE
         #ifdef RGBSINEWAVE
+          // this effect gives a natural pulsating or breathing like effect with more less fixed colors
+          
           analogWrite(RED_LED_PIN, 128 + 127 * cos(2 * PI / 20000 * millis()));
           //delay(driftValue);
           //analogWrite(GREEN_LED_PIN, 128 + 127 * cos(2 * PI / 20000 * millis()));
@@ -535,14 +539,16 @@ void turnOnLightEffects(char light){
         #endif
         
         #ifdef RGBCOLORCYCLE
-          // this is another breathing style effect that cycles through all colors of the rgb led
+          // this effect cycles through all colors of the rgb led
+          // code is by Marco Coll from April 2012
+          
           int    v1, v2=0;    // the new vertex and the previous one
-  
+          
           // initialise the place we start from as the first vertex in the array
           v.x = (vertex[v2].x ? MAX_RGB_VALUE : MIN_RGB_VALUE);
           v.y = (vertex[v2].y ? MAX_RGB_VALUE : MIN_RGB_VALUE);
           v.z = (vertex[v2].z ? MAX_RGB_VALUE : MIN_RGB_VALUE);
-        
+          
           // Now just loop through the path, traversing from one point to the next
           for (int i = 0; i < 2*MAX_PATH_SIZE; i++) {
             // !! loop index is double what the path index is as it is a nybble index !!
@@ -623,7 +629,6 @@ void turnOnLightEffects(char light){
       }
     #endif
   }
-  
 }
 
 
@@ -677,6 +682,7 @@ void checkTimerSwitch(){
   #ifdef TIMERSWITCH
     byte switchTimerValue = digitalRead(TIMER_SWITCH_PIN);
     if (switchTimerValue == HIGH) {
+      // in case the timer switch is HIGH we want to activate the effects every now and then automatically
       activateEffectsTimer = true;
       if (activateEffectsTimer != lastEffectTimerState) {
         lastEffectTimerState = activateEffectsTimer;
@@ -686,6 +692,7 @@ void checkTimerSwitch(){
       }
       
     } else {
+      // in case the timer switch is LOW we only want to activate the effects by manually pressing a button or with the PIR sensor
       activateEffectsTimer = false;
       if (activateEffectsTimer != lastEffectTimerState) {
         lastEffectTimerState = activateEffectsTimer;
@@ -704,6 +711,8 @@ void checkLightEffectsSwitch(){
     byte switchLightEffectValue = digitalRead(LIGHT_EFFECTS_SWITCH_PIN);
     
     if (switchLightEffectValue  == HIGH) {
+      // in case the light effects switch is HIGH we want a stroboscope or lightning effect
+      
       lightEffect = 's';
       if (lightEffect != lastLightEffectChosen) {
         lastLightEffectChosen = lightEffect;
@@ -712,6 +721,8 @@ void checkLightEffectsSwitch(){
         #endif
       }
     } else {
+      // in case the light effects switch is LOW we want a smooth light effect, breathing or color cycling
+      
       lightEffect = 'b';
       if (lightEffect != lastLightEffectChosen) {
         lastLightEffectChosen = lightEffect;
