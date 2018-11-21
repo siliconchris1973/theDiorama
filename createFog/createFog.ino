@@ -19,58 +19,53 @@
 // DEFINES
 //  enable / disable (comment out) certain features on compile time
 // ------------------------------------------------------------------------------------
-#define PUMP 1            // use a pump (either simple on/off or pwm driven below) to puff the fog into the diorama
-//#define PWMDRIVENPUMP 1   // drive the pump through a PWM with slowly building up tension through PWM pulses
-//#define VAPORIZER 1       // activate the vaporizer to actually ceate fog from a fluid
-#define ACTIVATORBUTTON 1 // activate effects on the press of a button
-//#define USSENSOR 1        // activate the effects in case someone comes closer than 10 cm - non functinal at the moment
-#define PIRSENSOR 1       // activate the PIR sensor to detect motion
-#define SIMPLELED 1       // simple LED on Pin 13 - usually the build in led for demo purposes
-//#define RGBLED 1          // create some really cool light effects in the fog with this RGB led
-#define TIMER 1           // this will activate the intermediate activation of the diorama every X hours
-#define TIMERSWITCH 1     // this will activate the switch to activate the above timer function
-#define DEBUG 1           // iutput debugging information to the serial console
+//#define PUMP 1              // use a pump (either simple on/off or pwm driven below) to puff the fog into the diorama
+//#define PWMDRIVENPUMP 1     // drive the pump through a PWM with slowly building up tension through PWM pulses
+//#define VAPORIZER 1         // activate the vaporizer to actually ceate fog from a fluid
+#define ACTIVATORBUTTON 1   // activate effects on the press of a button
+#define PIRSENSOR 1         // activate the PIR sensor to detect motion
+//#define SIMPLELED 1         // simple LED usually on pin 13 (build in led) for demo purposes
+#define RGBLED 1            // create some really cool light effects in the fog with this RGB led
+#define LIGHTEFFECTSWITCH 1 // switch between breathing style or stroboscope style light effects
+#define TIMER 1             // this will activate the intermediate activation of the diorama every X hours
+#define TIMERSWITCH 1       // this will activate the switch to activate the above timer function
+#define DEBUG 1             // iutput debugging information to the serial console
 
 
 // ------------------------------------------------------------------------------------
 // CONSTANTS
 // ------------------------------------------------------------------------------------
 #ifdef PUMP
-  const byte pumpPin = 9;                   // in case of the PWM driven pump, this must be a PWM pin
+  const byte PUMP_PIN = 9;                   // in case of the PWM driven pump, this must be a PWM pin
   #ifdef PWMDRIVENPUMP
-    const byte startIntensity = 128;          // intensity of the PWM pulse
+    const byte startIntensity = 128;        // intensity of the PWM pulse
   #endif
 #endif
 
 #ifdef VAPORIZER
-  const byte vaporizerPin = A3;              // digital pin which activates the vaporizer
+  const byte VAPORIZER_PIN = A3;             // digital pin which activates the vaporizer
   const uint16_t vaporizerInterval = 3000;  // milliseconds the vaporizer is active and inactive
 #endif
 
 #ifdef SIMPLELED
-  const byte ledPin = 13;
+  const byte SIMPLE_LED_PIN = 13;
 #endif
 #ifdef RGBLED
-  const byte redPin = 10;
-  const byte greenPin = 11;
-  const byte bluePin = 8;
+  const byte RED_LED_PIN = 8;
+  const byte GREEN_LED_PIN = 7;
+  const byte BLUE_LED_PIN = 6;
+#endif
+
+#ifdef LIGHTEFFECTSWITCH 
+  const byte LIGHT_EFFECTS_SWITCH_PIN = 4;
 #endif
 
 #ifdef ACTIVATORBUTTON
-  const byte activatorPin = 12;
-#endif
-
-#ifdef USSENSOR
-  // define pin numbers for the ultra sonic sensor
-  const byte usSensorTrigPin = A1;
-  const byte usSensorEchoPin = A2;
-  // if anything is closer that 10cm to the diorama, we want to 
-  // activate the fog and light effects
-  const uint8_t minDistance = 10; 
+  const byte EFFECTS_BUTTON_PIN = 12;
 #endif
 
 #ifdef PIRSENSOR
-  const byte pirSensorPin = 2;
+  const byte PIR_SENSOR_PIN = 2;
 #endif
 
 #ifdef TIMER
@@ -79,7 +74,7 @@
   // 10800000 = 3 hours / 1800000 = 30 Minutes / 180000 = 3 Minutes
   const unsigned long maxInActiveTime = 180000;
   #ifdef TIMERSWITCH
-    const byte timeSwitchPin = 3;
+    const byte TIMER_SWITCH_PIN = 3;
   #endif
 #endif
 
@@ -91,16 +86,6 @@ const unsigned long effectsMaxActiveTime = 30000;
 // ------------------------------------------------------------------------------------
 // GLOBAL VARS TO DETERMINE CURRENT RUN STATE
 // ------------------------------------------------------------------------------------
-#ifdef PWMDRIVENPUMP
-  byte intensity = 0;                       // Actual tension: 12 - (255-intensity) * 5 / 255  
-  byte crease = 3;                          // Changes motor intensity
-#endif
-
-#ifdef VAPORIZER
-  unsigned long vaporizerActivateMillis=0;  // time in millis, the vaporizer was activated
-  boolean vaporizerIsActive = false;
-#endif
-
 #ifdef ACTIVATORBUTTON
   uint8_t activatorVal = LOW;
 #endif
@@ -113,19 +98,45 @@ const unsigned long effectsMaxActiveTime = 30000;
   #endif
 #endif
 
-boolean activateEffects = false;               // shall we activate the effects or not
-unsigned long effectsActivationTime = 0;             // how long is the pump already active
+#ifdef PWMDRIVENPUMP
+  byte intensity = 0;                       // Actual tension: 12 - (255-intensity) * 5 / 255  
+  byte crease = 3;                          // Changes motor intensity
+#endif
+
+#ifdef VAPORIZER
+  unsigned long vaporizerActivateMillis=0;  // time in millis, the vaporizer was activated
+  boolean vaporizerIsActive = false;
+#endif
+
+#ifdef RGBLED
+  boolean redLedOn = false;
+  boolean greenLedOn = false;
+  boolean blueLedOn = false;
+#endif
+#ifdef LIGHTEFFECTSWITCH
+  char lastLightEffectChosen = '-';          // to store the last light effect, that was chosen
+#endif
+
+boolean activateEffects = false;            // shall we activate the effects or not
+unsigned long effectsActivationTime = 0;    // how long is the pump already active
 byte loopCounter = 0;                       // we only output a . to console every 10th loop
+
+char lightEffect = 's';                     // can either be s = stroboscope or b = breathing effect
+byte lightsOn = 0;                          // used to cycle through colors in case of stroboscope
 
 
 // ------------------------------------------------------------------------------------
 // METHOD SKELETONS
 // ------------------------------------------------------------------------------------
-void controlEffects(void);                  // starts or stops the water pump
-void decideOnActivation(void);              // set activateEffects true or false
-boolean readUsSensor(void);                 // return true in case motion is detected, false otherwise
-void timerSwitch(void);                     // check state of the timer switch
+void decideOnActivation(void);              // set activateEffects true or false to start / stop effects
+void controlEffects(void);                  // starts or stops the effects with below functions
+void turnOffEffects(void);                  // turn off all effects
+void turnOnPump(void);                      // turn on the water eh, fog pump
+void turnOnVaporizer(void);                 // turn on the vaporizer
+void turnOnLightEffects(char);              // turn on the lights, simple or rgb breathing or lightning effect
 
+void timerSwitch(void);                     // check state of the timer switch
+void lightEffectsSwitch(void);              // check state of led effects switch and set global var 
 
 
 // ------------------------------------------------------------------------------------
@@ -141,52 +152,51 @@ void setup() {
     #ifdef DEBUG
       Serial.print(" PUMP"); 
     #endif
-    pinMode(pumpPin, OUTPUT);
-    digitalWrite(pumpPin, LOW);
+    pinMode(PUMP_PIN, OUTPUT);
+    digitalWrite(PUMP_PIN, LOW);
   #endif
   #ifdef VAPORIZER
     #ifdef DEBUG
       Serial.print(" VAPORIZER"); 
     #endif
-    pinMode(vaporizerPin, OUTPUT);
-    digitalWrite(vaporizerPin, LOW);
+    pinMode(VAPORIZER_PIN, OUTPUT);
+    digitalWrite(VAPORIZER_PIN, LOW);
   #endif
   #ifdef SIMPLELED
     #ifdef DEBUG
-      Serial.print(" SIMPLELED"); 
+      Serial.print(" SIMPLELED");
     #endif
-    pinMode(ledPin, OUTPUT);
-    digitalWrite(ledPin, LOW);
+    pinMode(SIMPLE_LED_PIN, OUTPUT);
+    digitalWrite(SIMPLE_LED_PIN, LOW);
   #endif
   #ifdef RGBLED
     #ifdef DEBUG
       Serial.print(" RGBLED"); 
     #endif
-    pinMode(redPin, OUTPUT);
-    pinMode(greenPin, OUTPUT);
-    pinMode(bluePin, OUTPUT);
-    digitalWrite(redPin, LOW);
-    digitalWrite(greenPin, LOW);
-    digitalWrite(bluePin, LOW);
+    pinMode(RED_LED_PIN, OUTPUT);
+    pinMode(GREEN_LED_PIN, OUTPUT);
+    pinMode(BLUE_LED_PIN, OUTPUT);
+    digitalWrite(RED_LED_PIN, LOW);
+    digitalWrite(GREEN_LED_PIN, LOW);
+    digitalWrite(BLUE_LED_PIN, LOW);
+  #endif
+  #ifdef LIGHTEFFECTSWITCH
+    #ifdef DEBUG
+      Serial.print(" LIGHTEFFECTSWITCH"); 
+    #endif
+    pinMode(LIGHT_EFFECTS_SWITCH_PIN, INPUT);
   #endif
   #ifdef ACTIVATORBUTTON
     #ifdef DEBUG
       Serial.print(" ACTIVATORBUTTON"); 
     #endif
-    pinMode(activatorPin, INPUT);
-  #endif
-  #ifdef USSENSOR
-    #ifdef DEBUG
-      Serial.print(" USSENSOR"); 
-    #endif
-    pinMode(usSensorTrigPin, OUTPUT); // Sets the usSensorTrigPin as an Output
-    pinMode(usSensorEchoPin, INPUT); // Sets the usSensorEchoPin as an Input
+    pinMode(EFFECTS_BUTTON_PIN, INPUT);
   #endif
   #ifdef PIRSENSOR
     #ifdef DEBUG
       Serial.print(" PIRSENSOR"); 
     #endif
-    pinMode(pirSensorPin, INPUT);
+    pinMode(PIR_SENSOR_PIN, INPUT);
   #endif
   #ifdef TIMER
     #ifdef DEBUG
@@ -197,7 +207,7 @@ void setup() {
       #ifdef DEBUG
         Serial.print(" TIMERSWITCH");
       #endif
-      pinMode(timeSwitchPin, INPUT);
+      pinMode(TIMER_SWITCH_PIN, INPUT);
       activateEffectsTimer = false;
     #endif
   #endif
@@ -224,7 +234,7 @@ void loop() {
   // the pump, the vaporizer and the led
   controlEffects();
   
-  delay(100);
+  //delay(300);
   loopCounter++; 
 }
 
@@ -237,6 +247,9 @@ void decideOnActivation(void){
   boolean shallICheck = true;
   boolean readMotion = false;
   
+  //
+  // CHECK ON ACTIVATION
+  //
   #ifdef TIMER
     if (shallICheck && activateEffectsTimer && (millis()-lastEffectsTimeInMillis >= maxInActiveTime) && !activateEffects) {
       // activate the effects
@@ -257,7 +270,7 @@ void decideOnActivation(void){
   #ifdef ACTIVATORBUTTON
     if (shallICheck) {
       // check if the button was pressed. if yes activate the pump for 30 seconds
-      activatorVal = digitalRead(activatorPin);  // read input value
+      activatorVal = digitalRead(EFFECTS_BUTTON_PIN);  // read input value
       delay(50);
       if (activatorVal == HIGH) {
         // now check if the pump is already active
@@ -288,7 +301,7 @@ void decideOnActivation(void){
   #ifdef PIRSENSOR
     if (shallICheck) {
       readMotion = false;
-      if (digitalRead(pirSensorPin) == HIGH) readMotion = true;
+      if (digitalRead(PIR_SENSOR_PIN) == HIGH) readMotion = true;
       
       if (readMotion) {
         // now check if the pump is already active
@@ -315,30 +328,9 @@ void decideOnActivation(void){
     }
   #endif
   
-  // check the ultra sonic sensor for motion
-  #ifdef USSENSOR
-    if (shallICheck) {
-      readMotion = false;
-      readMotion = readUsSensor(); 
-      
-      if (readMotion) {
-        // now check if the pump is already active
-        if (!activateEffects) {
-          // if not, activate it
-          activateEffects = true;      // indicate to activate the pump
-          effectsActivationTime = millis();  // record current timestamp
-          
-          #ifdef DEBUG
-            Serial.print("EVENT: ");Serial.print(effectsActivationTime);Serial.print(" US SENSOR");
-          #endif
-        }
-        
-        // prevent the next method checking for activation to run
-        shallICheck = false;
-      } 
-    }
-  #endif
-  
+  //
+  // CHECK ON DEACTIVATION
+  // 
   // check, if the effects where already active for 30 seconds and if so, shut them down
   if ((millis()-effectsActivationTime) > effectsMaxActiveTime && activateEffects) {
     #ifdef TIMER
@@ -356,110 +348,199 @@ void decideOnActivation(void){
   }
 }
 
-// start the water pump and keep it running for set time
+// start the effects and keep them running for set time
 void controlEffects(){  
   if (!activateEffects) {
-    #ifdef PUMP
-      digitalWrite(pumpPin, LOW);         // turn pump off
-      #ifdef PWMDRIVENPUMP
-        intensity = startIntensity;         // reset pump motor intensity
-      #endif
-    #endif
-    #ifdef VAPORIZER
-      digitalWrite(vaporizerPin, LOW);    // turn vaporizer off
-    #endif
-    #ifdef SIMPLELED
-      digitalWrite(ledPin, LOW);          // turn led off
-    #endif
+    // the called function will, depending on which hardware is installed
+    // turn off all effects
+    turnOffEffects();
   } else {
     #ifdef PUMP
-      // if we want the pump to start slowly and build up tension,
-      // we need to use the PWM driven pump option and do so accordingly here
-      #ifdef PWMDRIVENPUMP
-        analogWrite(pumpPin, intensity);    // Writes PWM to the motor   
-        intensity = intensity + crease;
-        
-        #ifdef DEBUG
-          Serial.print(" ");Serial.print(intensity);
-        #endif
-        
-        if (intensity == 0 || intensity >= 255) {
-          crease = -crease;                // Increase to decrease due to line 255
-        }
-      #endif
-      // if we have a pump wich is not PWM driven as in starts up slowly, just turn the power on
-      #ifndef PWMDRIVENPUMP
-        digitalWrite(pumpPin, HIGH);
-      #endif
+      // if we have a pump, turn it on
+      turnOnPump();
     #endif
 
     #ifdef VAPORIZER
-      // the vaporizer is turned on and off in circles for 3 seconds each
-      if (millis()-vaporizerActivateMillis > vaporizerInterval)  { 
-        vaporizerIsActive = !vaporizerIsActive; 
-        vaporizerActivateMillis = millis();
-      }
-      if (vaporizerIsActive) {
-        digitalWrite(vaporizerPin, HIGH);    // turn vaporizer on
-      } else {
-        digitalWrite(vaporizerPin, LOW);     // turn vaporizer off
-      }
+      // if we have a vaporizer, intermediately turn it on and off
+      turnOnVaporizer();
     #endif
-
+    
     #ifdef SIMPLELED
-      digitalWrite(ledPin, HIGH);         // turn led on
+      // can be called with s = simple and r = rgb led  to start the light effects of these respectively
+      turnOnLightEffects('s');
     #endif
-
-    // finally we put a small delay here, so pump and vaporizer and everything else is not overburdened
-    delay(200);
+    
+    #ifdef RGBLED
+      turnOnLightEffects('r');
+    #endif
   }
 }
 
-// drive an ultra sonic distance sensor to read check whether or not someone is near
-boolean readUsSensor(){
-  #ifdef USSENSOR
-    // defines variables
-    long duration = 0;
-    int distance = 10000;
-    
-    // Clears the usSensorTrigPin
-    digitalWrite(usSensorTrigPin, LOW);
-    delayMicroseconds(2);
-    
-    // Sets the usSensorTrigPin on HIGH state for 10 micro seconds
-    digitalWrite(usSensorTrigPin, HIGH);
-    delayMicroseconds(10);
-    digitalWrite(usSensorTrigPin, LOW);
-    
-    // Reads the usSensorEchoPin, returns the sound wave travel time in microseconds
-    duration = pulseIn(usSensorEchoPin, HIGH);
-    
-    // Calculating the distance
-    distance= duration*0.034/2;
-    
-    // Prints the distance on the Serial Monitor
-    #ifdef DEBUG
-      Serial.print(" Distance: ");
-      Serial.print(distance);
-    #endif
-  
-    // only in case something is near enoufgh, we want to activate the effects
-    if (distance < minDistance) {
-      return(true);
-    } else {
-      return(false);
-    }
-  #endif
 
-  // in case USSENSOR is not defined, this always returns false
-  #ifndef USSENSOR
-    return(false);
+// turn on the pump
+void turnOnPump(){
+  #ifdef PUMP
+    // if we have a pump wich is not PWM driven, just turn the power on
+    #ifndef PWMDRIVENPUMP
+      digitalWrite(PUMP_PIN, HIGH);
+    #endif
+    
+    // if we want the pump to start slowly and build up tension,
+    // we need to use the PWM driven pump option and do so accordingly here
+    #ifdef PWMDRIVENPUMP
+      analogWrite(PUMP_PIN, intensity);    // Writes PWM to the motor   
+      intensity = intensity + crease;
+      
+      #ifdef DEBUG
+        Serial.print(" ");Serial.print(intensity);
+      #endif
+      
+      if (intensity == 0 || intensity >= 255) {
+        crease = -crease;                // Increase to decrease due to line 255
+      }
+    #endif
   #endif
 }
 
+
+// turn on the vaporizer
+void turnOnVaporizer(){
+  #ifdef VAPORIZER
+    // the vaporizer is turned on and off in circles for 3 seconds each
+    if (millis()-vaporizerActivateMillis > vaporizerInterval)  { 
+      vaporizerIsActive = !vaporizerIsActive; 
+      vaporizerActivateMillis = millis();
+    }
+    if (vaporizerIsActive) {
+      digitalWrite(VAPORIZER_PIN, HIGH);    // turn vaporizer on
+    } else {
+      digitalWrite(VAPORIZER_PIN, LOW);     // turn vaporizer off
+    }
+  #endif
+}
+
+
+// can be called with s = simple and r = rgb led  to start the light effects of these respectively
+void turnOnLightEffects(char light){
+  if (light == 's') {
+    #ifdef SIMPLELED
+      if (lightEffect == 'b') {
+        analogWrite(SIMPLE_LED_PIN, 128 + 127 * cos(2 * PI / 20000 * millis()));
+      } else {
+        digitalWrite(SIMPLE_LED_PIN, HIGH);
+      }
+    #endif
+  } else if (light == 'r') {
+    #ifdef RGBLED
+      if (lightEffect == 'b') {
+        // in case the light effects switch is LOW, we want a breathing like pulsating of light effects
+        
+        analogWrite(RED_LED_PIN, 128 + 127 * cos(2 * PI / 20000 * millis()));
+        //delay(driftValue);
+        //analogWrite(GREEN_LED_PIN, 128 + 127 * cos(2 * PI / 20000 * millis()));
+        analogWrite(GREEN_LED_PIN, 128);
+        //delay(driftValue);
+        analogWrite(BLUE_LED_PIN, 128 + 127 * cos(2 * PI / 20000 * millis()));
+      } else if (lightEffect == 'c') {
+        // this is another breathin gstyle effect that cycles through all colors of the rgb led
+
+        
+      } else if (lightEffect == 's') {
+        // in case the light effects switch is HIGH, we want a thunderstorm style lightning effect
+        
+        lightsOn++;
+        if (lightsOn == 1) {
+          analogWrite(RED_LED_PIN, 64);
+          analogWrite(BLUE_LED_PIN, 0);
+          analogWrite(GREEN_LED_PIN, 0);
+        } else if (lightsOn == 2) {
+          analogWrite(RED_LED_PIN, 127);
+          analogWrite(BLUE_LED_PIN, 64);
+          analogWrite(GREEN_LED_PIN, 0);
+        } else if (lightsOn == 3) {
+          analogWrite(RED_LED_PIN, 255);
+          analogWrite(BLUE_LED_PIN, 127);
+          analogWrite(GREEN_LED_PIN, 64);
+        } else if (lightsOn == 4) {
+          analogWrite(RED_LED_PIN, 127);
+          analogWrite(BLUE_LED_PIN, 255);
+          analogWrite(GREEN_LED_PIN, 127);
+        } else if (lightsOn == 5) {
+          analogWrite(RED_LED_PIN, 64);
+          analogWrite(BLUE_LED_PIN, 127);
+          analogWrite(GREEN_LED_PIN, 255);
+        } else if (lightsOn == 6) {
+          analogWrite(RED_LED_PIN, 0);
+          analogWrite(BLUE_LED_PIN, 64);
+          analogWrite(GREEN_LED_PIN, 127);
+        } else if (lightsOn == 7) {
+          analogWrite(RED_LED_PIN, 64);
+          analogWrite(BLUE_LED_PIN, 0);
+          analogWrite(GREEN_LED_PIN, 64);
+        } else if (lightsOn == 8) {
+          analogWrite(RED_LED_PIN, 127);
+          analogWrite(BLUE_LED_PIN, 64);
+          analogWrite(GREEN_LED_PIN, 0);
+        } else if (lightsOn == 9) {
+          analogWrite(RED_LED_PIN, 255);
+          analogWrite(BLUE_LED_PIN, 127);
+          analogWrite(GREEN_LED_PIN, 64);
+        } else if (lightsOn == 10) {
+          analogWrite(RED_LED_PIN, 127);
+          analogWrite(BLUE_LED_PIN, 255);
+          analogWrite(GREEN_LED_PIN, 127);
+        } else if (lightsOn == 11) {
+          analogWrite(RED_LED_PIN, 64);
+          analogWrite(BLUE_LED_PIN, 127);
+          analogWrite(GREEN_LED_PIN, 255);
+        } else if (lightsOn == 12) {
+          analogWrite(RED_LED_PIN, 64);
+          analogWrite(BLUE_LED_PIN, 64);
+          analogWrite(GREEN_LED_PIN, 127);
+        } else if (lightsOn == 13) {
+          analogWrite(RED_LED_PIN, 64);
+          analogWrite(BLUE_LED_PIN, 64);
+          analogWrite(GREEN_LED_PIN, 64);
+        }  else {
+          lightsOn = 0;
+          analogWrite(RED_LED_PIN, 255);
+          analogWrite(BLUE_LED_PIN, 255);
+          analogWrite(GREEN_LED_PIN, 255);
+        }
+        delay(100);
+      }
+    #endif
+  }
+  
+}
+
+
+// shuts down all effects - you might have guessed that
+void turnOffEffects(){
+  #ifdef PUMP
+    digitalWrite(PUMP_PIN, LOW);         // turn pump off
+    #ifdef PWMDRIVENPUMP
+      intensity = startIntensity;       // reset pump motor intensity
+    #endif
+  #endif
+  #ifdef VAPORIZER
+    digitalWrite(VAPORIZER_PIN, LOW);    // turn vaporizer off
+  #endif
+  #ifdef SIMPLELED
+    digitalWrite(SIMPLE_LED_PIN, LOW);    // turn led off
+  #endif
+  #ifdef RGBLED
+    digitalWrite(RED_LED_PIN, LOW);       // turn led off
+    digitalWrite(GREEN_LED_PIN, LOW);     // turn led off
+    digitalWrite(BLUE_LED_PIN, LOW);      // turn led off
+  #endif
+}
+
+
+// check wether or not the time functionality shall be used to intermediately start the effects
 void checkTimerSwitch(){
   #ifdef TIMERSWITCH
-    byte switchTimerValue = digitalRead(timeSwitchPin);
+    byte switchTimerValue = digitalRead(TIMER_SWITCH_PIN);
     if (switchTimerValue == HIGH) {
       activateEffectsTimer = true;
       if (activateEffectsTimer != lastEffectTimerState) {
@@ -478,6 +559,31 @@ void checkTimerSwitch(){
         #endif
       }
       
+    }
+  #endif
+}
+
+// switch between strobsocope style lightning or slowly pulsating light effect
+void lightEffectsSwitch(){
+  #ifdef LIGHTEFFECTSWITCH
+    byte switchLightEffectValue = digitalRead(LIGHT_EFFECTS_SWITCH_PIN);
+    
+    if (switchLightEffectValue  == HIGH) {
+      lightEffect = 's';
+      if (lightEffect != lastLightEffectChosen) {
+        lastLightEffectChosen = lightEffect;
+        #ifdef DEBUG
+          Serial.print("EVENT: ");Serial.print(millis());Serial.println(" LIGHT EFFECT STROBOSCOPE");
+        #endif
+      }
+    } else {
+      lightEffect = 'b';
+      if (lightEffect != lastLightEffectChosen) {
+        lastLightEffectChosen = lightEffect;
+        #ifdef DEBUG
+          Serial.print("EVENT: ");Serial.print(millis());Serial.println(" LIGHT EFFECT BREATHING");
+        #endif
+      }
     }
   #endif
 }
