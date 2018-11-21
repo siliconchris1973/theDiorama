@@ -658,6 +658,7 @@ void turnOffEffects(){
 // The transition is achieved by applying the 'delta' value to the coordinate.
 // By definition all the coordinates will complete the transition at the same 
 // time as we only have one loop index.
+// this code is by Marco Colli April 2012
 void traverse(int dx, int dy, int dz) {
   #ifdef RGBCOLORCYCLE
     if ((dx == 0) && (dy == 0) && (dz == 0))   // no point looping if we are staying in the same spot!
