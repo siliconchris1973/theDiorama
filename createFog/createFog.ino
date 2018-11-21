@@ -1,14 +1,14 @@
 // ------------------------------------------------------------------------------------
 // 
-//    CREATE FOG
+//    Diorama Effects (DIFX)
 // 
 // Create cool iluminated fog to bring more magic into your diorama
 // 
 // 
 // Functionality:
-//    Control an e-cigarette vaporizer and a water pump to create fog for a diorama
+//    Control an e-cigarette vaporizer, a pump and some lights to create magic fog for a diorama
 // 
-// CREATE FOG uses:
+// Diorama Effects (DIFX) uses:
 //    * a partially disassembled e-cigarette to vaporize liquid and ceate fog
 //    * a water pump to puff out the fog from the vaporizer into the diorama
 //    * an RGD led for cool effects
@@ -19,17 +19,17 @@
 // DEFINES
 //  enable / disable (comment out) certain features on compile time
 // ------------------------------------------------------------------------------------
-//#define PUMP 1              // use a pump (either simple on/off or pwm driven below) to puff the fog into the diorama
-//#define PWMDRIVENPUMP 1     // drive the pump through a PWM with slowly building up tension through PWM pulses
-//#define VAPORIZER 1         // activate the vaporizer to actually ceate fog from a fluid
-#define ACTIVATORBUTTON 1   // activate effects on the press of a button
-#define PIRSENSOR 1         // activate the PIR sensor to detect motion
-//#define SIMPLELED 1         // simple LED usually on pin 13 (build in led) for demo purposes
-#define RGBLED 1            // create some really cool light effects in the fog with this RGB led
-#define LIGHTEFFECTSWITCH 1 // switch between breathing style or stroboscope style light effects
-#define TIMER 1             // this will activate the intermediate activation of the diorama every X hours
-#define TIMERSWITCH 1       // this will activate the switch to activate the above timer function
-#define DEBUG 1             // iutput debugging information to the serial console
+#define PUMP 1                  // use a pump (either simple on/off or pwm driven below) to puff the fog into the diorama
+//#define PWM_DRIVEN_PUMP 1       // drive the pump through a PWM with slowly building up tension through PWM pulses
+#define VAPORIZER 1             // activate the vaporizer to actually ceate fog from a fluid
+#define ACTIVATOR_BUTTON 1      // activate effects on the press of a button
+#define PIR_SENSOR 1            // activate the PIR sensor to detect motion
+//#define SIMPLE_LED 1            // simple LED usually on pin 13 (build in led) for demo purposes
+#define RGB_LED 1               // create some really cool light effects in the fog with this RGB led
+#define LIGHT_EFFECTS_SWITCH 1  // switch between breathing style or stroboscope style light effects
+#define TIMER 1                 // this will activate the intermediate activation of the diorama every X hours
+#define TIMER_SWITCH 1          // this will activate the switch to activate the above timer function
+//#define DEBUG 1                 // iutput debugging information to the serial console
 
 
 // ONLY ONE OF THE TWO OPTIONS BELOW CAN BE CHOSEN
@@ -56,7 +56,7 @@
 // ------------------------------------------------------------------------------------
 #ifdef PUMP
   const byte PUMP_PIN = 9;                   // in case of the PWM driven pump, this must be a PWM pin
-  #ifdef PWMDRIVENPUMP
+  #ifdef PWM_DRIVEN_PUMP
     const byte startIntensity = 128;         // intensity of the PWM pulse
   #endif
 #endif
@@ -66,10 +66,10 @@
   const uint16_t vaporizerInterval = 3000;   // milliseconds the vaporizer is active and inactive
 #endif
 
-#ifdef SIMPLELED
+#ifdef SIMPLE_LED
   const byte SIMPLE_LED_PIN = 13;
 #endif
-#ifdef RGBLED
+#ifdef RGB_LED
   const byte RED_LED_PIN = 8;
   const byte GREEN_LED_PIN = 7;
   const byte BLUE_LED_PIN = 6;
@@ -96,18 +96,16 @@
   
   static coord  v; // the current rgb coordinates (colour) being displayed
   
-  /*
-  Vertices of a cube
-        
-      C+----------+G
-      /|        / |
-    B+---------+F |
-     | |       |  |    y   
-     |D+-------|--+H   ^  7 z
-     |/        | /     | /
-    A+---------+E      +--->x
-  
-  */
+  // Vertices of a cube
+  //      
+  //    C+----------+G
+  //    /|        / |
+  //  B+---------+F |
+  //   | |       |  |    y   
+  //   |D+-------|--+H   ^  7 z
+  //   |/        | /     | /
+  //  A+---------+E      +--->x
+  //
   const coord vertex[] = {
    //x  y  z      name
     {0, 0, 0}, // A or 0
@@ -120,12 +118,10 @@
     {1, 0, 1}  // H or 7
   };
   
-  /*
-  A list of vertex numbers encoded 2 per byte.
-  Hex digits are used as vertices 0-7 fit nicely (3 bits 000-111) and have the same visual
-  representation as decimal, so bytes 0x12, 0x34 ... should be interpreted as vertex 1 to 
-  v2 to v3 to v4 (ie, one continuous path B to C to D to E).
-  */
+  // A list of vertex numbers encoded 2 per byte.
+  // Hex digits are used as vertices 0-7 fit nicely (3 bits 000-111) and have the same visual
+  // representation as decimal, so bytes 0x12, 0x34 ... should be interpreted as vertex 1 to 
+  // v2 to v3 to v4 (ie, one continuous path B to C to D to E).
   const byte path[] = {
     0x01, 0x23, 0x76, 0x54, 0x03, 0x21, 0x56, 0x74,             // trace the edges
     0x13, 0x64, 0x16, 0x02, 0x75, 0x24, 0x35, 0x17, 0x25, 0x70, // do the diagonals
@@ -134,15 +130,15 @@
   #define  MAX_PATH_SIZE  (sizeof(path)/sizeof(path[0]))  // size of the array
 #endif
 
-#ifdef LIGHTEFFECTSWITCH 
+#ifdef LIGHT_EFFECTS_SWITCH 
   const byte LIGHT_EFFECTS_SWITCH_PIN = 4;
 #endif
 
-#ifdef ACTIVATORBUTTON
+#ifdef ACTIVATOR_BUTTON
   const byte EFFECTS_BUTTON_PIN = 12;
 #endif
 
-#ifdef PIRSENSOR
+#ifdef PIR_SENSOR
   const byte PIR_SENSOR_PIN = 2;
 #endif
 
@@ -151,7 +147,7 @@
   // fog and light effects are activated without manual intervention
   // 10800000 = 3 hours / 1800000 = 30 Minutes / 180000 = 3 Minutes
   const unsigned long maxInActiveTime = 180000;
-  #ifdef TIMERSWITCH
+  #ifdef TIMER_SWITCH
     const byte TIMER_SWITCH_PIN = 3;
   #endif
 #endif
@@ -171,19 +167,19 @@
 // ------------------------------------------------------------------------------------
 // GLOBAL VARS TO DETERMINE CURRENT RUN STATE
 // ------------------------------------------------------------------------------------
-#ifdef ACTIVATORBUTTON
+#ifdef ACTIVATOR_BUTTON
   uint8_t activatorVal = LOW;
 #endif
 
 #ifdef TIMER
   unsigned long lastEffectsTimeInMillis;
   boolean activateEffectsTimer = true;
-  #ifdef TIMERSWITCH
+  #ifdef TIMER_SWITCH
     boolean lastEffectTimerState = false;
   #endif
 #endif
 
-#ifdef PWMDRIVENPUMP
+#ifdef PWM_DRIVEN_PUMP
   byte intensity = 0;                       // Actual tension: 12 - (255-intensity) * 5 / 255  
   byte crease = 3;                          // Changes motor intensity
 #endif
@@ -193,13 +189,13 @@
   boolean vaporizerIsActive = false;
 #endif
 
-#ifdef RGBLED
+#ifdef RGB_LED
   boolean redLedOn = false;
   boolean greenLedOn = false;
   boolean blueLedOn = false;
 #endif
-#ifdef LIGHTEFFECTSWITCH
-  char lastLightEffectChosen = '-';          // to store the last light effect, that was chosen
+#ifdef LIGHT_EFFECTS_SWITCH
+  char lastLightEffectChosen = '-';         // to store the last light effect, that was chosen
 #endif
 
 boolean activateEffects = false;            // shall we activate the effects or not
@@ -249,16 +245,16 @@ void setup() {
     pinMode(VAPORIZER_PIN, OUTPUT);
     digitalWrite(VAPORIZER_PIN, LOW);
   #endif
-  #ifdef SIMPLELED
+  #ifdef SIMPLE_LED
     #ifdef DEBUG
-      Serial.print(" SIMPLELED");
+      Serial.print(" SIMPLE_LED");
     #endif
     pinMode(SIMPLE_LED_PIN, OUTPUT);
     digitalWrite(SIMPLE_LED_PIN, LOW);
   #endif
-  #ifdef RGBLED
+  #ifdef RGB_LED
     #ifdef DEBUG
-      Serial.print(" RGBLED"); 
+      Serial.print(" RGB_LED"); 
     #endif
     pinMode(RED_LED_PIN, OUTPUT);
     pinMode(GREEN_LED_PIN, OUTPUT);
@@ -267,21 +263,21 @@ void setup() {
     digitalWrite(GREEN_LED_PIN, LOW);
     digitalWrite(BLUE_LED_PIN, LOW);
   #endif
-  #ifdef LIGHTEFFECTSWITCH
+  #ifdef LIGHT_EFFECTS_SWITCH
     #ifdef DEBUG
-      Serial.print(" LIGHTEFFECTSWITCH"); 
+      Serial.print(" LIGHT_EFFECTS_SWITCH"); 
     #endif
     pinMode(LIGHT_EFFECTS_SWITCH_PIN, INPUT);
   #endif
-  #ifdef ACTIVATORBUTTON
+  #ifdef ACTIVATOR_BUTTON
     #ifdef DEBUG
-      Serial.print(" ACTIVATORBUTTON"); 
+      Serial.print(" ACTIVATOR_BUTTON"); 
     #endif
     pinMode(EFFECTS_BUTTON_PIN, INPUT);
   #endif
-  #ifdef PIRSENSOR
+  #ifdef PIR_SENSOR
     #ifdef DEBUG
-      Serial.print(" PIRSENSOR"); 
+      Serial.print(" PIR_SENSOR"); 
     #endif
     pinMode(PIR_SENSOR_PIN, INPUT);
   #endif
@@ -290,9 +286,9 @@ void setup() {
       Serial.print(" TIMER");
     #endif
     lastEffectsTimeInMillis = millis();
-    #ifdef TIMERSWITCH
+    #ifdef TIMER_SWITCH
       #ifdef DEBUG
-        Serial.print(" TIMERSWITCH");
+        Serial.print(" TIMER_SWITCH");
       #endif
       pinMode(TIMER_SWITCH_PIN, INPUT);
       activateEffectsTimer = false;
@@ -306,12 +302,12 @@ void setup() {
 
 void loop() {
   // in case the switch for the timer is included, check it's state on every loop
-  #ifdef TIMERSWITCH
+  #ifdef TIMER_SWITCH
     checkTimerSwitch();
   #endif
   
   // in case the switch to chose the light effects style is included, check it's state on every loop
-  #ifdef LIGHTEFFECTSWITCH
+  #ifdef LIGHT_EFFECTS_SWITCH
     checkLightEffectsSwitch();
   #endif
   
@@ -356,7 +352,7 @@ void decideOnActivation(void){
   #endif
   
   // check if the button was pressed
-  #ifdef ACTIVATORBUTTON
+  #ifdef ACTIVATOR_BUTTON
     if (shallICheck) {
       // check if the button was pressed. if yes activate the pump for 30 seconds
       activatorVal = digitalRead(EFFECTS_BUTTON_PIN);  // read input value
@@ -387,7 +383,7 @@ void decideOnActivation(void){
   #endif
   
   // check the ultra sonic sensor for motion
-  #ifdef PIRSENSOR
+  #ifdef PIR_SENSOR
     if (shallICheck) {
       readMotion = false;
       if (digitalRead(PIR_SENSOR_PIN) == HIGH) readMotion = true;
@@ -454,12 +450,12 @@ void controlEffects(){
       turnOnVaporizer();
     #endif
     
-    #ifdef SIMPLELED
+    #ifdef SIMPLE_LED
       // can be called with s = simple and r = rgb led  to start the light effects of these respectively
       turnOnLightEffects('s');
     #endif
     
-    #ifdef RGBLED
+    #ifdef RGB_LED
       turnOnLightEffects('r');
     #endif
   }
@@ -470,13 +466,13 @@ void controlEffects(){
 void turnOnPump(){
   #ifdef PUMP
     // if we have a pump wich is not PWM driven, just turn the power on
-    #ifndef PWMDRIVENPUMP
+    #ifndef PWM_DRIVEN_PUMP
       digitalWrite(PUMP_PIN, HIGH);
     #endif
     
     // if we want the pump to start slowly and build up tension,
     // we need to use the PWM driven pump option and do so accordingly here
-    #ifdef PWMDRIVENPUMP
+    #ifdef PWM_DRIVEN_PUMP
       analogWrite(PUMP_PIN, intensity);    // Writes PWM to the motor   
       intensity = intensity + crease;
       
@@ -512,7 +508,7 @@ void turnOnVaporizer(){
 // can be called with s = simple and r = rgb led  to start the light effects of these respectively
 void turnOnLightEffects(char light){
   if (light == 's') {
-    #ifdef SIMPLELED
+    #ifdef SIMPLE_LED
       if (lightEffect == 'b') {
         // in case the light effects switch is LOW, we want a smooth light effect
         analogWrite(SIMPLE_LED_PIN, 128 + 127 * cos(2 * PI / 20000 * millis()));
@@ -522,7 +518,7 @@ void turnOnLightEffects(char light){
       }
     #endif
   } else if (light == 'r') {
-    #ifdef RGBLED
+    #ifdef RGB_LED
       if (lightEffect == 'b') {
         // in case the light effects switch is LOW, we want a smooth light effect
         // this can either be a breathing like pulsating or a cycle through all given colors
@@ -636,17 +632,17 @@ void turnOnLightEffects(char light){
 void turnOffEffects(){
   #ifdef PUMP
     digitalWrite(PUMP_PIN, LOW);         // turn pump off
-    #ifdef PWMDRIVENPUMP
+    #ifdef PWM_DRIVEN_PUMP
       intensity = startIntensity;       // reset pump motor intensity
     #endif
   #endif
   #ifdef VAPORIZER
     digitalWrite(VAPORIZER_PIN, LOW);    // turn vaporizer off
   #endif
-  #ifdef SIMPLELED
+  #ifdef SIMPLE_LED
     digitalWrite(SIMPLE_LED_PIN, LOW);    // turn led off
   #endif
-  #ifdef RGBLED
+  #ifdef RGB_LED
     digitalWrite(RED_LED_PIN, LOW);       // turn led off
     digitalWrite(GREEN_LED_PIN, LOW);     // turn led off
     digitalWrite(BLUE_LED_PIN, LOW);      // turn led off
@@ -666,10 +662,11 @@ void traverse(int dx, int dy, int dz) {
       
     for (int i = 0; i < MAX_RGB_VALUE-MIN_RGB_VALUE; i++, v.x += dx, v.y += dy, v.z += dz) {
       // set the colour in the LED
-      analogWrite(RED_LED_PIN, v.x);
-      analogWrite(GREEN_LED_PIN, v.y);
-      analogWrite(BLUE_LED_PIN, v.z);
-      
+      #ifdef RGB_LED
+        analogWrite(RED_LED_PIN, v.x);
+        analogWrite(GREEN_LED_PIN, v.y);
+        analogWrite(BLUE_LED_PIN, v.z);
+      #endif
       delay(TRANSITION_DELAY);  // wait fot the transition delay
     }
     
@@ -680,7 +677,7 @@ void traverse(int dx, int dy, int dz) {
 
 // check wether or not the time functionality shall be used to intermediately start the effects
 void checkTimerSwitch(){
-  #ifdef TIMERSWITCH
+  #ifdef TIMER_SWITCH
     byte switchTimerValue = digitalRead(TIMER_SWITCH_PIN);
     if (switchTimerValue == HIGH) {
       // in case the timer switch is HIGH we want to activate the effects every now and then automatically
@@ -708,7 +705,7 @@ void checkTimerSwitch(){
 
 // switch between strobsocope style lightning or slowly pulsating light effect
 void checkLightEffectsSwitch(){
-  #ifdef LIGHTEFFECTSWITCH
+  #ifdef LIGHT_EFFECTS_SWITCH
     byte switchLightEffectValue = digitalRead(LIGHT_EFFECTS_SWITCH_PIN);
     
     if (switchLightEffectValue  == HIGH) {
