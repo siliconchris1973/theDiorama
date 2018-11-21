@@ -32,19 +32,38 @@
 #define DEBUG 1             // iutput debugging information to the serial console
 
 
+// ONLY ONE OF THE TWO OPTIONS BELOW CAN BE CHOSEN
+//
+// Activate this option to use a sine wave style breathing with more less fixed colors on the rgb led
+//#define RGBSINEWAVE 1
+//
+// Activate the next option to use the properties of the RGB Colour Cube to cycle through colors
+// The RGB colour space can be viewed as a cube of colour. If we assume a cube of dimension 1, then the 
+// coordinates of the vertices for the cubve will range from (0,0,0) to (1,1,1) (all black to all white).
+// The transitions between each vertex will be a smooth colour flow and we can exploit this by using the 
+// path coordinates as the LED transition effect.
+// Total traversal time is ((MAX_RGB_VALUE - MIN_RGB_VALUE) * TRANSITION_DELAY) + WAIT_DELAY
+// eg, ((255-0)*70)+500 = 18350ms = 18.35s 
+// -->  we should make sure that we have enough effect time for at least one cycle
+// 
+// All credits for the code of this cool color cycle go to Marco Colli (April 2012)
+//    https://forum.arduino.cc/index.php?topic=102040.0
+#define RGBCOLORCYCLE 1
+
+
 // ------------------------------------------------------------------------------------
 // CONSTANTS
 // ------------------------------------------------------------------------------------
 #ifdef PUMP
   const byte PUMP_PIN = 9;                   // in case of the PWM driven pump, this must be a PWM pin
   #ifdef PWMDRIVENPUMP
-    const byte startIntensity = 128;        // intensity of the PWM pulse
+    const byte startIntensity = 128;         // intensity of the PWM pulse
   #endif
 #endif
 
 #ifdef VAPORIZER
   const byte VAPORIZER_PIN = A3;             // digital pin which activates the vaporizer
-  const uint16_t vaporizerInterval = 3000;  // milliseconds the vaporizer is active and inactive
+  const uint16_t vaporizerInterval = 3000;   // milliseconds the vaporizer is active and inactive
 #endif
 
 #ifdef SIMPLELED
@@ -54,6 +73,65 @@
   const byte RED_LED_PIN = 8;
   const byte GREEN_LED_PIN = 7;
   const byte BLUE_LED_PIN = 6;
+#endif
+
+// in case of the RGB Color Cycler we need a lot of stuff ...
+#ifdef RGBCOLORCYCLE
+  // Constants for readability are better than magic numbers
+  // Used to adjust the limits for the LED, especially if it has a lower ON threshold
+  #define  MIN_RGB_VALUE  10   // no smaller than 0. 
+  #define  MAX_RGB_VALUE  255  // no bigger than 255.
+  
+  // Slowing things down we need ...
+  #define  TRANSITION_DELAY  70   // in milliseconds, between individual light changes
+  #define  WAIT_DELAY        500  // in milliseconds, at the end of each traverse
+  //
+  // Total traversal time is ((MAX_RGB_VALUE - MIN_RGB_VALUE) * TRANSITION_DELAY) + WAIT_DELAY
+  // eg, ((255-0)*70)+500 = 18350ms = 18.35s
+  
+  // Structure to contain a 3D coordinate
+  typedef struct {
+    byte  x, y, z;
+  } coord;
+  
+  static coord  v; // the current rgb coordinates (colour) being displayed
+  
+  /*
+  Vertices of a cube
+        
+      C+----------+G
+      /|        / |
+    B+---------+F |
+     | |       |  |    y   
+     |D+-------|--+H   ^  7 z
+     |/        | /     | /
+    A+---------+E      +--->x
+  
+  */
+  const coord vertex[] = {
+   //x  y  z      name
+    {0, 0, 0}, // A or 0
+    {0, 1, 0}, // B or 1
+    {0, 1, 1}, // C or 2
+    {0, 0, 1}, // D or 3
+    {1, 0, 0}, // E or 4
+    {1, 1, 0}, // F or 5
+    {1, 1, 1}, // G or 6
+    {1, 0, 1}  // H or 7
+  };
+  
+  /*
+  A list of vertex numbers encoded 2 per byte.
+  Hex digits are used as vertices 0-7 fit nicely (3 bits 000-111) and have the same visual
+  representation as decimal, so bytes 0x12, 0x34 ... should be interpreted as vertex 1 to 
+  v2 to v3 to v4 (ie, one continuous path B to C to D to E).
+  */
+  const byte path[] = {
+    0x01, 0x23, 0x76, 0x54, 0x03, 0x21, 0x56, 0x74,             // trace the edges
+    0x13, 0x64, 0x16, 0x02, 0x75, 0x24, 0x35, 0x17, 0x25, 0x70, // do the diagonals
+  };
+  
+  #define  MAX_PATH_SIZE  (sizeof(path)/sizeof(path[0]))  // size of the array
 #endif
 
 #ifdef LIGHTEFFECTSWITCH 
@@ -78,8 +156,15 @@
   #endif
 #endif
 
-// how long shall the effects (mainly pump and vaporizer) be active - 30 second
-const unsigned long effectsMaxActiveTime = 30000;  
+// how long shall the effects (pump, vaporizer and lights) be active?
+// usually 30 second
+#ifndef RGBCOLORCYCLE
+  const unsigned long effectsMaxActiveTime = 30000;
+#endif
+// in case we use the rgb color cycle, we need approx 18,35 second for one cycle
+#ifdef RGBCOLORCYCLE
+  const unsigned long effectsMaxActiveTime = 36700;  // this gives us enough time for 2 cycles
+#endif
 
 
 
@@ -135,8 +220,10 @@ void turnOnPump(void);                      // turn on the water eh, fog pump
 void turnOnVaporizer(void);                 // turn on the vaporizer
 void turnOnLightEffects(char);              // turn on the lights, simple or rgb breathing or lightning effect
 
-void timerSwitch(void);                     // check state of the timer switch
-void lightEffectsSwitch(void);              // check state of led effects switch and set global var 
+void traverseColorCube(int, int, int);      // traverse the vertices of a 3d color cube to determine next color value
+
+void checkTimerSwitch(void);                // check state of the timer switch
+void checkLightEffectsSwitch(void);         // check state of led effects switch and set global var 
 
 
 // ------------------------------------------------------------------------------------
@@ -218,13 +305,15 @@ void setup() {
 
 
 void loop() {
-  // on every tenth loop, we print out a . to the serial console
-  #ifdef DEBUG
-  //  if (loopCounter >= 100) { Serial.print("."); loopCounter = 0; }
-  #endif
-
   // in case the switch for the timer is included, check it's state on every loop
-  checkTimerSwitch();
+  #ifdef TIMERSWITCH
+    checkTimerSwitch();
+  #endif
+  
+  // in case the switch to chose the light effects style is included, check it's state on every loop
+  #ifdef LIGHTEFFECTSWITCH
+    checkLightEffectsSwitch();
+  #endif
   
   // check if the effects shall be activated, that is there is motion near
   // or the maximum alloted time for inactivity of the diorama was reached
@@ -433,18 +522,41 @@ void turnOnLightEffects(char light){
   } else if (light == 'r') {
     #ifdef RGBLED
       if (lightEffect == 'b') {
-        // in case the light effects switch is LOW, we want a breathing like pulsating of light effects
-        
-        analogWrite(RED_LED_PIN, 128 + 127 * cos(2 * PI / 20000 * millis()));
-        //delay(driftValue);
-        //analogWrite(GREEN_LED_PIN, 128 + 127 * cos(2 * PI / 20000 * millis()));
-        analogWrite(GREEN_LED_PIN, 128);
-        //delay(driftValue);
-        analogWrite(BLUE_LED_PIN, 128 + 127 * cos(2 * PI / 20000 * millis()));
-      } else if (lightEffect == 'c') {
-        // this is another breathin gstyle effect that cycles through all colors of the rgb led
+        // in case the light effects switch is LOW, we want a breathing like pulsating of light 
+        // this can either be a real pulsating or a cycle through all given colors
 
+        #ifdef RGBSINEWAVE
+          analogWrite(RED_LED_PIN, 128 + 127 * cos(2 * PI / 20000 * millis()));
+          //delay(driftValue);
+          //analogWrite(GREEN_LED_PIN, 128 + 127 * cos(2 * PI / 20000 * millis()));
+          analogWrite(GREEN_LED_PIN, 128);
+          //delay(driftValue);
+          analogWrite(BLUE_LED_PIN, 128 + 127 * cos(2 * PI / 20000 * millis()));
+        #endif
         
+        #ifdef RGBCOLORCYCLE
+          // this is another breathing style effect that cycles through all colors of the rgb led
+          int    v1, v2=0;    // the new vertex and the previous one
+  
+          // initialise the place we start from as the first vertex in the array
+          v.x = (vertex[v2].x ? MAX_RGB_VALUE : MIN_RGB_VALUE);
+          v.y = (vertex[v2].y ? MAX_RGB_VALUE : MIN_RGB_VALUE);
+          v.z = (vertex[v2].z ? MAX_RGB_VALUE : MIN_RGB_VALUE);
+        
+          // Now just loop through the path, traversing from one point to the next
+          for (int i = 0; i < 2*MAX_PATH_SIZE; i++) {
+            // !! loop index is double what the path index is as it is a nybble index !!
+            v1 = v2;
+            if (i&1)  // odd number is the second element and ...
+              v2 = path[i>>1] & 0xf;  // ... the bottom nybble (index /2) or ...
+            else      // ... even number is the first element and ...
+              v2 = path[i>>1] >> 4;  // ... the top nybble
+              
+            traverse(vertex[v2].x-vertex[v1].x, 
+                     vertex[v2].y-vertex[v1].y, 
+                     vertex[v2].z-vertex[v1].z);
+          }
+        #endif
       } else if (lightEffect == 's') {
         // in case the light effects switch is HIGH, we want a thunderstorm style lightning effect
         
@@ -537,6 +649,29 @@ void turnOffEffects(){
 }
 
 
+// Move along the colour line from where we are to the next vertex of the cube.
+// The transition is achieved by applying the 'delta' value to the coordinate.
+// By definition all the coordinates will complete the transition at the same 
+// time as we only have one loop index.
+void traverse(int dx, int dy, int dz) {
+  #ifdef RGBCOLORCYCLE
+    if ((dx == 0) && (dy == 0) && (dz == 0))   // no point looping if we are staying in the same spot!
+      return;
+      
+    for (int i = 0; i < MAX_RGB_VALUE-MIN_RGB_VALUE; i++, v.x += dx, v.y += dy, v.z += dz) {
+      // set the colour in the LED
+      analogWrite(RED_LED_PIN, v.x);
+      analogWrite(GREEN_LED_PIN, v.y);
+      analogWrite(BLUE_LED_PIN, v.z);
+      
+      delay(TRANSITION_DELAY);  // wait fot the transition delay
+    }
+    
+    delay(WAIT_DELAY);          // give it an extra rest at the end of the traverse
+  #endif
+}
+
+
 // check wether or not the time functionality shall be used to intermediately start the effects
 void checkTimerSwitch(){
   #ifdef TIMERSWITCH
@@ -564,7 +699,7 @@ void checkTimerSwitch(){
 }
 
 // switch between strobsocope style lightning or slowly pulsating light effect
-void lightEffectsSwitch(){
+void checkLightEffectsSwitch(){
   #ifdef LIGHTEFFECTSWITCH
     byte switchLightEffectValue = digitalRead(LIGHT_EFFECTS_SWITCH_PIN);
     
